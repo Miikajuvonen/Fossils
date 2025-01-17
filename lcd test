@@ -1,0 +1,28 @@
+#include <Adafruit_GFX.h>
+#include <Adafruit_ST7735.h>
+#include <SPI.h>
+
+// Define pins for the display
+#define TFT_CS   5
+#define TFT_RST  14
+#define TFT_DC   27
+#define TFT_SCLK 18
+#define TFT_MOSI 23
+
+// Create an instance of the display
+Adafruit_ST7735 tft = Adafruit_ST7735(TFT_CS, TFT_DC, TFT_MOSI, TFT_SCLK, TFT_RST);
+
+void setup() {
+  // Initialize the display
+  tft.initR(INITR_BLACKTAB);
+  tft.setRotation(1); // Adjust the rotation as needed
+  tft.fillScreen(ST7735_BLACK);
+  tft.setTextColor(ST7735_WHITE);
+  tft.setTextSize(1);
+  tft.setCursor(0, 0);
+  tft.println("Hello, LILYGO T-SIM7000G!");
+}
+
+void loop() {
+  // You can add more code here to update the display
+}
