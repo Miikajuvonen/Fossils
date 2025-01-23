@@ -1,0 +1,132 @@
+#include <TinyGsmClient.h>
+#include <UniversalTelegramBot.h>
+#include <TinyGPS++.h>
+
+// GSM-asetukset
+#define MODEM_RX 16 // ESP32 RX SIM800L:stä
+#define MODEM_TX 17 // ESP32 TX SIM800L:ään
+#define MODEM_RST 5 // Reset-pinni, jos käytössä
+const char apn[] = "internet"; // Vaihda operaattorin APN-asetuksilla
+const char user[] = ""; // Jätä tyhjäksi, jos ei vaadita
+const char pass[] = ""; // Jätä tyhjäksi, jos ei vaadita
+
+// Telegram-asetukset
+const char* botToken = "TELEGRAM_BOT_TOKEN";
+
+// GPS UART-portit
+const int RXPin = 26; // GPS-vastaanotto
+const int TXPin = 27; // GPS-lähetys
+HardwareSerial gpsSerial(2); // Käytetään Serial2:ta
+TinyGPSPlus gps;
+
+// GSM-moduuli
+HardwareSerial modemSerial(1);
+TinyGsm modem(modemSerial);
+TinyGsmClient client(modem);
+UniversalTelegramBot bot(botToken, client);
+
+// Botin komennot
+String startCommand = "/startgps";
+String stopCommand = "/stopgps";
+
+// Tilamuuttujat
+bool gpsActive = false;
+unsigned long lastTimeCheck = 0;
+const unsigned long checkInterval = 2000; // Viive viestitarkistuksiin
+
+void setup() {
+  Serial.begin(115200);
+  
+  // GPS Serial-alustaminen
+  gpsSerial.begin(9600, SERIAL_8N1, RXPin, TXPin);
+  gpsSerial.end(); // GPS pois päältä aluksi
+
+  // GSM Serial-alustaminen
+  modemSerial.begin(9600, SERIAL_8N1, MODEM_RX, MODEM_TX);
+
+  // Yhdistetään GSM-verkkoon
+  Serial.println("Yhdistetään GSM-verkkoon...");
+  modem.restart();
+  if (!modem.waitForNetwork()) {
+    Serial.println("Verkkoon yhdistäminen epäonnistui.");
+    while (true);
+  }
+  Serial.println("Yhdistetty GSM-verkkoon!");
+  
+  // Yhdistetään internetiin
+  Serial.println("Muodostetaan GPRS-yhteyttä...");
+  if (!modem.gprsConnect(apn, user, pass)) {
+    Serial.println("GPRS-yhteyden muodostaminen epäonnistui.");
+    while (true);
+  }
+  Serial.println("GPRS-yhteys muodostettu!");
+}
+
+void loop() {
+  // Telegram-viestien tarkistus
+  if (millis() - lastTimeCheck > checkInterval) {
+    int numNewMessages = bot.getUpdates(bot.last_message_received + 1);
+    while (numNewMessages) {
+      handleNewMessages(numNewMessages);
+      numNewMessages = bot.getUpdates(bot.last_message_received + 1);
+    }
+    lastTimeCheck = millis();
+  }
+
+  // Jos GPS on päällä, luetaan sijainti
+  if (gpsActive) {
+    while (gpsSerial.available() > 0) {
+      char c = gpsSerial.read();
+      if (gps.encode(c)) { // Parsitaan GPS-data
+        if (gps.location.isUpdated()) { // Päivitetty sijainti saatavilla
+          // Koordinaattien ja karttalinkin muodostaminen
+          String latitude = String(gps.location.lat(), 6);
+          String longitude = String(gps.location.lng(), 6);
+          String mapLink = "https://maps.google.com/?q=" + latitude + "," + longitude;
+
+          // Koordinaattien lähetys Telegram-botille
+          bot.sendMessage(bot.messages[0].chat_id, 
+                          "Koordinaatit:\nLat: " + latitude + 
+                          "\nLon: " + longitude + 
+                          "\nKarttalinkki:\n" + mapLink, "");
+
+          // GPS:n sammutus tietojen lähetyksen jälkeen
+          gpsSerial.end();
+          gpsActive = false;
+          Serial.println("GPS sammutettu automaattisesti tietojen lähetyksen jälkeen.");
+        }
+      }
+    }
+  }
+}
+
+void handleNewMessages(int numNewMessages) {
+  for (int i = 0; i < numNewMessages; i++) {
+    String chat_id = String(bot.messages[i].chat_id);
+    String text = bot.messages[i].text;
+
+    Serial.println("Vastaanotettu viesti: " + text);
+
+    if (text == startCommand) {
+      if (!gpsActive) {
+        bot.sendMessage(chat_id, "GPS käynnistetään...", "");
+        gpsSerial.begin(9600, SERIAL_8N1, RXPin, TXPin); // GPS päälle
+        gpsActive = true;
+        Serial.println("GPS käynnistetty.");
+      } else {
+        bot.sendMessage(chat_id, "GPS on jo päällä.", "");
+      }
+    } else if (text == stopCommand) {
+      if (gpsActive) {
+        bot.sendMessage(chat_id, "GPS sammutetaan...", "");
+        gpsSerial.end(); // GPS pois päältä
+        gpsActive = false;
+        Serial.println("GPS sammutettu.");
+      } else {
+        bot.sendMessage(chat_id, "GPS on jo pois päältä.", "");
+      }
+    } else {
+      bot.sendMessage(chat_id, "Tuntematon komento. Käytä /startgps tai /stopgps.", "");
+    }
+  }
+}
