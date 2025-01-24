@@ -1,7 +1,24 @@
-
 #include <Adafruit_GFX.h>
 #include <Adafruit_ST7735.h>
 #include <SPI.h>
+#include <WiFi.h>
+#include <NTPClient.h>
+#include <WiFiUdp.h>
+
+// Wifi connection
+const char* ssid     = "moaiwlan";
+const char* password = "Ossi1Paavo234";
+
+// Setting up the NTP
+const char* ntpServer = "pool.ntp.org";
+const long  gmtOffset_sec = 7200;
+const int   daylightOffset_sec = 3600;
+
+
+// Variables to save date and time
+String formattedDate;
+String dayStamp;
+String timeStamp;
 
 
 // Define pins for the display
@@ -14,6 +31,45 @@
 // Create an instance of the display
 Adafruit_ST7735 tft = Adafruit_ST7735(TFT_CS, TFT_DC, TFT_MOSI, TFT_SCLK, TFT_RST);
 
+void getNextHalfHour(struct tm timeinfo)
+{
+  if (timeinfo.tm_min < 30) {
+    timeinfo.tm_min = 30;  // If minutes are less than 30, set to 30
+  } else {
+    timeinfo.tm_min = 0;   // If minutes are 30 or more, set to 0 (next hour)
+    timeinfo.tm_hour++;    // Increment the hour
+  }
+
+  // Handle hour overflow (e.g., from 23:30 to 00:00)
+  if (timeinfo.tm_hour >= 24) {
+    timeinfo.tm_hour = 0;
+  }
+
+  // Format the next half hour time
+  char timeStr[20];
+  strftime(timeStr, sizeof(timeStr), "%H:%M", &timeinfo);  // Format time as HH:MM
+
+  // Concatenate the text
+  tft.println("Next half hour: " + String(timeStr));
+}
+
+void printTime()
+{
+  tft.initR(INITR_BLACKTAB);
+  tft.setRotation(1); // Adjust the rotation as needed
+  tft.fillScreen(ST7735_BLACK);
+  tft.setTextColor(ST7735_WHITE);
+  tft.setTextSize(1);
+  tft.setCursor(0, 0);
+  struct tm timeinfo;
+  if(!getLocalTime(&timeinfo)){
+    tft.println("Failed to obtain time");
+    return;
+  }
+  tft.println(&timeinfo, "Car stopped at: %H:%M:%S");
+  getNextHalfHour(timeinfo);
+}
+
 void setup() {
   // Initialize the display
   tft.initR(INITR_BLACKTAB);
@@ -22,7 +78,22 @@ void setup() {
   tft.setTextColor(ST7735_WHITE);
   tft.setTextSize(1);
   tft.setCursor(0, 0);
-  tft.println("Hello, LILYGO T-SIM7000G!");
+  tft.print("Connecting to ");
+  tft.println(ssid);
+  WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    tft.print(".");
+  }
+  tft.println(" CONNECTED");
+  
+  //init and get the time
+  configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
+  printTime();
+
+  //disconnect WiFi as it's no longer needed
+  WiFi.disconnect(true);
+  WiFi.mode(WIFI_OFF);
 }
 
 void loop() {
