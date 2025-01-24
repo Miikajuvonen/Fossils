@@ -1,0 +1,157 @@
+#include <TinyGsmClient.h>        // For GSM module
+#include <UniversalTelegramBot.h> // For Telegram bot
+#include <LiquidCrystal_I2C.h>    // For the LCD
+#include <TinyGPSPlus.h>          // For GPS
+#include <HardwareSerial.h>       // For Serial communication with GPS module
+
+// Pin Definitions
+#define MOTION_SENSOR_PIN 14
+#define GPS_RX_PIN 16
+#define GPS_TX_PIN 17
+#define LCD_ADDRESS 0x27
+#define LCD_COLUMNS 16
+#define LCD_ROWS 2
+
+// SIM Card & GSM Config
+#define GSM_SERIAL Serial2
+#define GSM_BAUD 9600
+const char apn[] = "your_apn"; // Replace with your network APN
+const char user[] = "";        // Leave blank if not required
+const char pass[] = "";        // Leave blank if not required
+
+// Telegram Bot Token
+const char* botToken = "YOUR_BOT_TOKEN";
+
+// Global Variables
+TinyGsm modem(GSM_SERIAL);
+TinyGsmClient client(modem);
+UniversalTelegramBot bot(botToken, client);
+LiquidCrystal_I2C lcd(LCD_ADDRESS, LCD_COLUMNS, LCD_ROWS);
+HardwareSerial gpsSerial(1);
+TinyGPSPlus gps;
+
+unsigned long motionCheckInterval = 35000; // 35 seconds
+unsigned long lastMotionCheck = 0;
+bool carIsMoving = false;
+
+String parkingTime;
+
+// Function to calculate the next half-hour parking time
+String getNextParkingTime() {
+  time_t now = time(NULL);
+  struct tm* timeinfo = localtime(&now);
+  int minutes = timeinfo->tm_min;
+  int extraMinutes = (minutes % 30 == 0) ? 30 : (30 - (minutes % 30));
+  timeinfo->tm_min += extraMinutes;
+  timeinfo->tm_sec = 0;
+  mktime(timeinfo); // Normalize the time struct
+  char timeStr[6];
+  strftime(timeStr, sizeof(timeStr), "%H:%M", timeinfo);
+  return String(timeStr);
+}
+
+// Function to handle motion detection
+void checkMotion() {
+  if (digitalRead(MOTION_SENSOR_PIN) == LOW) {
+    if (!carIsMoving) {
+      carIsMoving = true;
+      parkingTime = getNextParkingTime();
+      lcd.setCursor(0, 0);
+      lcd.print("Parking Time:");
+      lcd.setCursor(0, 1);
+      lcd.print(parkingTime);
+    }
+  } else {
+    carIsMoving = false;
+  }
+}
+
+// Function to send GPS coordinates via Telegram
+void sendGPSLocation(String chatId) {
+  if (gps.location.isValid()) {
+    String message = "Car Location:\n";
+    message += "Lat: " + String(gps.location.lat(), 6) + "\n";
+    message += "Lng: " + String(gps.location.lng(), 6);
+    bot.sendMessage(chatId, message, "");
+  } else {
+    bot.sendMessage(chatId, "Unable to get GPS location.", "");
+  }
+}
+
+// Function to handle Telegram commands
+void handleNewMessages(int numNewMessages) {
+  for (int i = 0; i < numNewMessages; i++) {
+    String chatId = String(bot.messages[i].chat_id);
+    String text = bot.messages[i].text;
+
+    if (text == "/getlocation") {
+      sendGPSLocation(chatId);
+    } else if (text == "/reset") {
+      parkingTime = getNextParkingTime();
+      lcd.setCursor(0, 0);
+      lcd.print("Parking Time:");
+      lcd.setCursor(0, 1);
+      lcd.print(parkingTime);
+      bot.sendMessage(chatId, "Parking time reset.", "");
+    } else {
+      bot.sendMessage(chatId, "Unknown command.", "");
+    }
+  }
+}
+
+// Setup Function
+void setup() {
+  // Initialize Serial
+  Serial.begin(115200);
+  gpsSerial.begin(9600, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
+  GSM_SERIAL.begin(GSM_BAUD);
+
+  // Initialize LCD
+  lcd.begin(LCD_COLUMNS, LCD_ROWS);
+  lcd.backlight();
+
+  // Initialize Motion Sensor
+  pinMode(MOTION_SENSOR_PIN, INPUT_PULLUP);
+
+  // Initialize GSM and Connect to Network
+  Serial.print("Initializing GSM module...");
+  if (!modem.begin()) {
+    Serial.println("Failed to initialize modem. Restarting...");
+    delay(5000);
+    ESP.restart();
+  }
+  Serial.println("GSM initialized.");
+
+  Serial.print("Connecting to cellular network...");
+  if (!modem.gprsConnect(apn, user, pass)) {
+    Serial.println("Failed to connect to network. Restarting...");
+    delay(5000);
+    ESP.restart();
+  }
+  Serial.println("Connected to cellular network.");
+
+  // Initialize Telegram Bot
+  bot.updateToken(botToken);
+}
+
+// Loop Function
+void loop() {
+  // Check for motion at intervals
+  if (millis() - lastMotionCheck >= motionCheckInterval) {
+    lastMotionCheck = millis();
+    checkMotion();
+  }
+
+  // Read GPS data
+  while (gpsSerial.available() > 0) {
+    gps.encode(gpsSerial.read());
+  }
+
+  // Handle Telegram messages
+  int numNewMessages = bot.getUpdates(bot.last_message_received + 1);
+  if (numNewMessages > 0) {
+    handleNewMessages(numNewMessages);
+  }
+
+  delay(100);
+}
