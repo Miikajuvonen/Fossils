@@ -1,8 +1,10 @@
-#include <TinyGsmClient.h>        // For GSM module
-#include <UniversalTelegramBot.h> // For Telegram bot
-#include <LiquidCrystal_I2C.h>    // For the LCD
-#include <TinyGPSPlus.h>          // For GPS
-#include <HardwareSerial.h>       // For Serial communication with GPS module
+#define GSM_MODEM_MODEL SIM7600 
+
+#include <TinyGsmClient.h> 
+#include <UniversalTelegramBot.h> 
+#include <LiquidCrystal_I2C.h> 
+#include <TinyGPSPlus.h> 
+#include <HardwareSerial.h> 
 
 // Pin Definitions
 #define MOTION_SENSOR_PIN 14
@@ -15,12 +17,11 @@
 // SIM Card & GSM Config
 #define GSM_SERIAL Serial2
 #define GSM_BAUD 9600
-const char apn[] = "your_apn"; // Replace with your network APN
-const char user[] = "";        // Leave blank if not required
-const char pass[] = "";        // Leave blank if not required
+const char apn[] = "prepaid.dna.fi";
+const char user[] = "";
+const char pass[] = "";
 
-// Telegram Bot Token
-const char* botToken = "YOUR_BOT_TOKEN";
+const char* botToken = "REPLACE WITH BOT TOKEN";
 
 // Global Variables
 TinyGsm modem(GSM_SERIAL);
@@ -38,120 +39,120 @@ String parkingTime;
 
 // Function to calculate the next half-hour parking time
 String getNextParkingTime() {
-  time_t now = time(NULL);
-  struct tm* timeinfo = localtime(&now);
-  int minutes = timeinfo->tm_min;
-  int extraMinutes = (minutes % 30 == 0) ? 30 : (30 - (minutes % 30));
-  timeinfo->tm_min += extraMinutes;
-  timeinfo->tm_sec = 0;
-  mktime(timeinfo); // Normalize the time struct
-  char timeStr[6];
-  strftime(timeStr, sizeof(timeStr), "%H:%M", timeinfo);
-  return String(timeStr);
+  time_t now = time(NULL);
+  struct tm* timeinfo = localtime(&now);
+  int minutes = timeinfo->tm_min;
+  int extraMinutes = (minutes % 30 == 0) ? 30 : (30 - (minutes % 30));
+  timeinfo->tm_min += extraMinutes;
+  timeinfo->tm_sec = 0;
+  mktime(timeinfo); // Normalize the time struct
+  char timeStr[6];
+  strftime(timeStr, sizeof(timeStr), "%H:%M", timeinfo);
+  return String(timeStr);
 }
 
 // Function to handle motion detection
 void checkMotion() {
-  if (digitalRead(MOTION_SENSOR_PIN) == LOW) {
-    if (!carIsMoving) {
-      carIsMoving = true;
-      parkingTime = getNextParkingTime();
-      lcd.setCursor(0, 0);
-      lcd.print("Parking Time:");
-      lcd.setCursor(0, 1);
-      lcd.print(parkingTime);
-    }
-  } else {
-    carIsMoving = false;
-  }
+  if (digitalRead(MOTION_SENSOR_PIN) == LOW) {
+    if (!carIsMoving) {
+      carIsMoving = true;
+      parkingTime = getNextParkingTime();
+      lcd.setCursor(0, 0);
+      lcd.print("Parking Time:");
+      lcd.setCursor(0, 1);
+      lcd.print(parkingTime);
+    }
+  } else {
+    carIsMoving = false;
+  }
 }
 
 // Function to send GPS coordinates via Telegram
 void sendGPSLocation(String chatId) {
-  if (gps.location.isValid()) {
-    String message = "Car Location:\n";
-    message += "Lat: " + String(gps.location.lat(), 6) + "\n";
-    message += "Lng: " + String(gps.location.lng(), 6);
-    bot.sendMessage(chatId, message, "");
-  } else {
-    bot.sendMessage(chatId, "Unable to get GPS location.", "");
-  }
+  if (gps.location.isValid()) {
+    String message = "Car Location:\n";
+    message += "Lat: " + String(gps.location.lat(), 6) + "\n";
+    message += "Lng: " + String(gps.location.lng(), 6);
+    bot.sendMessage(chatId, message, "");
+  } else {
+    bot.sendMessage(chatId, "Unable to get GPS location.", "");
+  }
 }
 
 // Function to handle Telegram commands
 void handleNewMessages(int numNewMessages) {
-  for (int i = 0; i < numNewMessages; i++) {
-    String chatId = String(bot.messages[i].chat_id);
-    String text = bot.messages[i].text;
+  for (int i = 0; i < numNewMessages; i++) {
+    String chatId = String(bot.messages[i].chat_id);
+    String text = bot.messages[i].text;
 
-    if (text == "/getlocation") {
-      sendGPSLocation(chatId);
-    } else if (text == "/reset") {
-      parkingTime = getNextParkingTime();
-      lcd.setCursor(0, 0);
-      lcd.print("Parking Time:");
-      lcd.setCursor(0, 1);
-      lcd.print(parkingTime);
-      bot.sendMessage(chatId, "Parking time reset.", "");
-    } else {
-      bot.sendMessage(chatId, "Unknown command.", "");
-    }
-  }
+    if (text == "/getlocation") {
+      sendGPSLocation(chatId);
+    } else if (text == "/reset") {
+      parkingTime = getNextParkingTime();
+      lcd.setCursor(0, 0);
+      lcd.print("Parking Time:");
+      lcd.setCursor(0, 1);
+      lcd.print(parkingTime);
+      bot.sendMessage(chatId, "Parking time reset.", "");
+    } else {
+      bot.sendMessage(chatId, "Unknown command.", "");
+    }
+  }
 }
 
 // Setup Function
 void setup() {
-  // Initialize Serial
-  Serial.begin(115200);
-  gpsSerial.begin(9600, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
-  GSM_SERIAL.begin(GSM_BAUD);
+  // Initialize Serial
+  Serial.begin(115200);
+  gpsSerial.begin(9600, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
+  GSM_SERIAL.begin(GSM_BAUD);
 
-  // Initialize LCD
-  lcd.begin(LCD_COLUMNS, LCD_ROWS);
-  lcd.backlight();
+  // Initialize LCD
+  lcd.begin(LCD_COLUMNS, LCD_ROWS);
+  lcd.backlight();
 
-  // Initialize Motion Sensor
-  pinMode(MOTION_SENSOR_PIN, INPUT_PULLUP);
+  // Initialize Motion Sensor
+  pinMode(MOTION_SENSOR_PIN, INPUT_PULLUP);
 
-  // Initialize GSM and Connect to Network
-  Serial.print("Initializing GSM module...");
-  if (!modem.begin()) {
-    Serial.println("Failed to initialize modem. Restarting...");
-    delay(5000);
-    ESP.restart();
-  }
-  Serial.println("GSM initialized.");
+  // Initialize GSM and Connect to Network
+  Serial.print("Initializing GSM module...");
+  if (!modem.begin()) {
+    Serial.println("Failed to initialize modem. Restarting...");
+    delay(5000);
+    ESP.restart();
+  }
+  Serial.println("GSM initialized.");
 
-  Serial.print("Connecting to cellular network...");
-  if (!modem.gprsConnect(apn, user, pass)) {
-    Serial.println("Failed to connect to network. Restarting...");
-    delay(5000);
-    ESP.restart();
-  }
-  Serial.println("Connected to cellular network.");
+  Serial.print("Connecting to cellular network...");
+  if (!modem.gprsConnect(apn, user, pass)) {
+    Serial.println("Failed to connect to network. Restarting...");
+    delay(5000);
+    ESP.restart();
+  }
+  Serial.println("Connected to cellular network.");
 
-  // Initialize Telegram Bot
-  bot.updateToken(botToken);
+  // Initialize Telegram Bot
+  bot.updateToken(7568394111:AAEc673Oxmk8AeYf_Pad_P_2dkgpvWaxF3Y);
 }
 
 // Loop Function
 void loop() {
-  // Check for motion at intervals
-  if (millis() - lastMotionCheck >= motionCheckInterval) {
-    lastMotionCheck = millis();
-    checkMotion();
-  }
+  // Check for motion at intervals
+  if (millis() - lastMotionCheck >= motionCheckInterval) {
+    lastMotionCheck = millis();
+    checkMotion();
+  }
 
-  // Read GPS data
-  while (gpsSerial.available() > 0) {
-    gps.encode(gpsSerial.read());
-  }
+  // Read GPS data
+  while (gpsSerial.available() > 0) {
+    gps.encode(gpsSerial.read());
+  }
 
-  // Handle Telegram messages
-  int numNewMessages = bot.getUpdates(bot.last_message_received + 1);
-  if (numNewMessages > 0) {
-    handleNewMessages(numNewMessages);
-  }
+  // Handle Telegram messages
+  int numNewMessages = bot.getUpdates(bot.last_message_received + 1);
+  if (numNewMessages > 0) {
+    handleNewMessages(numNewMessages);
+  }
 
-  delay(100);
+  delay(1000);
 }
