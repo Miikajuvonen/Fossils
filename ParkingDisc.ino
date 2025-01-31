@@ -12,6 +12,8 @@
 
 #include <Adafruit_GFX.h>    // Core graphics librar
 #include <Adafruit_ST7735.h> // Hardware-specific library
+#include <ArduinoCellular.h> // cellular librarz
+#include <ArduinoBearSSL.h> // SSL client library
 #include <UniversalTelegramBot.h> // Telegram bot library
 #define BOT_TOKEN "7568394111:AAEc673Oxmk8AeYf_Pad_P_2dkgpvWaxF3Y"
 //#include <Fonts/FreeSans9pt7b.h>//If you want to use fonts,
@@ -133,7 +135,11 @@ void setup() {
 
 
   // Telegram bot
-  BearSSLClient secureClient = modem.getSecureNetworkClient();
+  ArduinoCellular cellular = ArduinoCellular();
+  cellular.begin();
+  cellular.unlockSim("1234");
+  cellular.connect(apn, gprsUser, gprsPass);
+  BearSSLClient secureClient = cellular.getSecureNetworkClient();
   UniversalTelegramBot bot(BOT_TOKEN, secured_client);
 
   // Get ChatID
