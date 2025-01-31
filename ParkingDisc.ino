@@ -12,6 +12,8 @@
 
 #include <Adafruit_GFX.h>    // Core graphics librar
 #include <Adafruit_ST7735.h> // Hardware-specific library
+#include <UniversalTelegramBot.h> // Telegram bot library
+#define BOT_TOKEN "7568394111:AAEc673Oxmk8AeYf_Pad_P_2dkgpvWaxF3Y"
 //#include <Fonts/FreeSans9pt7b.h>//If you want to use fonts,
 // Pin definitions for ESP32 display
 #define TFT_CS    15
@@ -34,7 +36,7 @@ const char apn[]  = "internet";     //SET TO YOUR APN
 const char gprsUser[] = "";
 const char gprsPass[] = "";
 bool sent = false;
-#define SMS_TARGET  "+358405029030" // Set phone number, if you want to test SMS
+#define SMS_TARGET  "" // Set phone number, if you want to test SMS
 
 #include <TinyGsmClient.h>
 
@@ -127,6 +129,18 @@ void setup() {
   if (modem.waitResponse(10000L) != 1) {
     DBG(" + CFUN = 0  false ");
   }
+
+
+
+  // Telegram bot
+  BearSSLClient secureClient = modem.getSecureNetworkClient();
+  UniversalTelegramBot bot(BOT_TOKEN, secured_client);
+
+  // Get ChatID
+  int updates = bot.getUpdates(bot.last_message_received + 1);
+  DBG("Total Updates:", updates);
+
+
   delay(2000);
   blankBox(0);
 
