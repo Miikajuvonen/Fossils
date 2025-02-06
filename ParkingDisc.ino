@@ -12,10 +12,6 @@
 
 #include <Adafruit_GFX.h>    // Core graphics librar
 #include <Adafruit_ST7735.h> // Hardware-specific library
-#include <ArduinoCellular.h> // cellular librarz
-#include <ArduinoBearSSL.h> // SSL client library
-#include <UniversalTelegramBot.h> // Telegram bot library
-#define BOT_TOKEN "7568394111:AAEc673Oxmk8AeYf_Pad_P_2dkgpvWaxF3Y"
 //#include <Fonts/FreeSans9pt7b.h>//If you want to use fonts,
 // Pin definitions for ESP32 display
 #define TFT_CS    15
@@ -31,7 +27,7 @@ Adafruit_ST7735 tft = Adafruit_ST7735(TFT_CS, TFT_DC, TFT_MOSI, TFT_SCLK, TFT_RS
 #define TINY_GSM_RX_BUFFER 1024 // Set RX buffer to 1Kb
 #define SerialAT Serial1
 #define DUMP_AT_COMMANDS // See all AT commands, if wanted
-#define GSM_PIN "0000" // set GSM PIN, if any
+#define GSM_PIN "1234" // set GSM PIN, if any
 
 // Your GPRS credentials, if any
 const char apn[]  = "prepaid.dna.fi";     //SET TO YOUR APN
@@ -131,22 +127,6 @@ void setup() {
   if (modem.waitResponse(10000L) != 1) {
     DBG(" + CFUN = 0  false ");
   }
-
-
-
-  // Telegram bot
-  ArduinoCellular cellular = ArduinoCellular();
-  cellular.begin();
-  cellular.unlockSim("1234");
-  cellular.connect(apn, gprsUser, gprsPass);
-  BearSSLClient secureClient = cellular.getSecureNetworkClient();
-  UniversalTelegramBot bot(BOT_TOKEN, secured_client);
-
-  // Get ChatID
-  int updates = bot.getUpdates(bot.last_message_received + 1);
-  DBG("Total Updates:", updates);
-
-
   delay(2000);
   blankBox(0);
 
@@ -157,7 +137,7 @@ void setup() {
     51 GSM and LTE only
   * * * */
   // CHANGE NETWORK MODE, IF NEEDED
-  res = modem.setNetworkMode(2);
+  res = modem.setNetworkMode(38);
   if (res != "1") {
     DBG("setNetworkMode  false ");
     return ;
