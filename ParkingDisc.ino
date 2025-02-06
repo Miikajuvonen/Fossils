@@ -34,7 +34,7 @@ Adafruit_ST7735 tft = Adafruit_ST7735(TFT_CS, TFT_DC, TFT_MOSI, TFT_SCLK, TFT_RS
 #define GSM_PIN "0000" // set GSM PIN, if any
 
 // Your GPRS credentials, if any
-const char apn[]  = "internet";     //SET TO YOUR APN
+const char apn[]  = "prepaid.dna.fi";     //SET TO YOUR APN
 const char gprsUser[] = "";
 const char gprsPass[] = "";
 bool sent = false;
