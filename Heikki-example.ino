@@ -34,7 +34,7 @@ const char apn[]  = "internet";     //SET TO YOUR APN
 const char gprsUser[] = "";
 const char gprsPass[] = "";
 bool sent = false;
-#define SMS_TARGET  "+358405029030" // Set phone number, if you want to test SMS
+#define SMS_TARGET  "PHONE-NUMBER" // Set phone number, if you want to test SMS
 
 #include <TinyGsmClient.h>
 
