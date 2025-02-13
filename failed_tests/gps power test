@@ -1,0 +1,207 @@
+// WIRING INSTRUCTIONS FROM DISPLAY TO ESP32
+// 1 to GROUND
+// 2 to 3V3
+// 3 to 18
+// 4 to 23
+// 5 to 4
+// 6 to 5
+// 7 to 15
+// 8 to 3.3
+// Additionally, SMS sending switch between 19 and GROUND
+
+#include <Adafruit_GFX.h>    
+#include <Adafruit_ST7735.h> 
+#include <TinyGsmClient.h>
+
+#define TFT_CS    15
+#define TFT_RST   4
+#define TFT_DC    5
+#define TFT_SCLK  18
+#define TFT_MOSI  23
+
+Adafruit_ST7735 tft = Adafruit_ST7735(TFT_CS, TFT_DC, TFT_MOSI, TFT_SCLK, TFT_RST);
+
+#define TINY_GSM_MODEM_SIM7000
+#define TINY_GSM_RX_BUFFER 1024 
+#define SerialAT Serial1
+#define GSM_PIN "1234"
+
+const char apn[]  = "prepaid.dna.fi";     
+const char gprsUser[] = "";
+const char gprsPass[] = "";
+bool sent = false;
+#define SMS_TARGET  ""
+
+#ifdef DUMP_AT_COMMANDS
+#include <StreamDebugger.h>
+StreamDebugger debugger(SerialAT, Serial);
+TinyGsm modem(debugger);
+#else
+TinyGsm modem(SerialAT);
+#endif
+
+#define UART_BAUD   115200
+#define PIN_TX      27
+#define PIN_RX      26
+#define PWR_PIN     4
+
+const int smsSwitchPin = 19;
+int smsSwitch;
+float lat, lon;
+String strLat, strLon, strDate, strTime;
+
+void setup() {
+  pinMode(smsSwitchPin, INPUT_PULLUP);
+  tft.initR(INITR_BLACKTAB);
+  tft.fillScreen(ST7735_BLUE);
+  tft.setRotation(3);
+  Serial.begin(115200);
+  delay(10);
+  SerialAT.begin(UART_BAUD, SERIAL_8N1, PIN_RX, PIN_TX);
+
+  Serial.println("Initializing system...");
+  tft.setCursor(0, 20);
+  tft.print("Initializing system...");
+
+  if (!modem.restart()) {
+    Serial.println("Failed to restart modem, continuing...");
+  }
+
+  Serial.println("Initializing modem...");
+  tft.setCursor(0, 20);
+  tft.print("Initializing modem...");
+
+  if (!modem.init()) {
+    Serial.println("Failed to initialize modem.");
+  }
+
+  String name = modem.getModemName();
+  Serial.println("Modem Name: " + name);
+  tft.setCursor(0, 20);
+  tft.print("Modem:\n" + name);
+
+  String modemInfo = modem.getModemInfo();
+  Serial.println("Modem Info:\n" + modemInfo);
+
+  if (GSM_PIN && modem.getSimStatus() != 3) {
+    modem.simUnlock(GSM_PIN);
+  }
+
+  Serial.println("Setting network mode...");
+  if (modem.setNetworkMode(38) != "1") {
+    Serial.println("Failed to set network mode.");
+  }
+
+  Serial.println("Setting preferred mode...");
+  if (modem.setPreferredMode(1) != "1") {
+    Serial.println("Failed to set preferred mode.");
+  }
+
+  Serial.println("Waiting for network...");
+  if (!modem.waitForNetwork()) {
+    delay(10000);
+    return;
+  }
+
+  if (modem.isNetworkConnected()) {
+    Serial.println("Network connected");
+  }
+
+  modem.gprsDisconnect();
+  if (!modem.isGprsConnected()) {
+    Serial.println("GPRS disconnected");
+  }
+
+  modem.enableGPS();
+}
+
+void loop() {
+  blankBox(0);
+  Serial.println("\n---Starting GPS TEST---\n");
+
+  modem.sendAT("+CGNSPWR?");
+  if (modem.waitResponse(5000L) != 1) {
+    Serial.println("GPS power check failed! Enabling GPS...");
+    modem.sendAT("+CGNSPWR=1");
+    if (modem.waitResponse(5000L) != 1) {
+      Serial.println("Failed to turn on GPS.");
+      return;
+    } else {
+      Serial.println("GPS is now ON.");
+    }
+  } else {
+    Serial.println("GPS is already ON.");
+  }
+
+  modem.sendAT("+SGPIO=0,4,1,1");
+  if (modem.waitResponse(10000L) != 1) {
+    Serial.println("GPS power ON failed!");
+    return;
+  } else {
+    Serial.println("GPS power ON success!");
+  }
+
+  delay(5000);
+
+  Serial.println("Getting GPS data...");
+  if (modem.getGPS(&lat, &lon)) {
+    Serial.println("GPS data received!");
+    Serial.print("Latitude: ");
+    Serial.println(lat, 6);
+    Serial.print("Longitude: ");
+    Serial.println(lon, 6);
+    
+    strLat = (String(lat, 6));
+    strLon = (String(lon, 6));
+    
+    blankBox(0);
+    tft.setCursor(0, 20);
+    tft.print("Location found:");
+    tft.setCursor(0, 40);
+    tft.print("Latitude:");
+    tft.setCursor(0, 60);
+    tft.print(strLat + "\n\nLongitude: " + strLon + "\n\nDate: " + strDate + "\n\nTime(GMT): " + strTime);
+    
+    if (readSMSswitch()) {
+      Serial.println("Sending SMS...");
+      String smsMessage = "https://www.google.com/maps/@" + strLat + "," + strLon + ",14z";
+      if (modem.sendSMS(SMS_TARGET, smsMessage)) {
+        Serial.println("SMS sent!");
+        drawBox(3, 2, "SMS is sent.");
+        sent = true;
+      } else {
+        Serial.println("SMS failed!");
+      }
+    }
+  } else {
+    Serial.println("No GPS data received.");
+    drawBox(0, 3, "Getting GPS data...");
+  }
+
+  delay(1000);
+}
+
+bool readSMSswitch() {
+  smsSwitch = digitalRead(smsSwitchPin);
+  Serial.println(smsSwitch ? "Switch is ON" : "Switch is OFF");
+  drawBox(3, smsSwitch ? 2 : 1, smsSwitch ? "SMS IS sent." : "SMS NOT sent.");
+  return smsSwitch;
+}
+
+void drawBox(int boxLoc, int txtColor, String strMsg) {
+  tft.fillRect(0, boxLoc * 32, 160, 32, ST7735_BLUE);
+  tft.setCursor(0, boxLoc * 32);
+  
+  switch (txtColor) {
+    case 1: tft.setTextColor(ST7735_RED); break;
+    case 2: tft.setTextColor(ST7735_GREEN); break;
+    case 3: tft.setTextColor(ST7735_YELLOW); break;
+    default: tft.setTextColor(ST7735_WHITE); break;
+  }
+  
+  tft.println(strMsg);
+}
+
+void blankBox(int boxLoc) {
+  tft.fillRect(0, boxLoc * 32, 160, 32, ST7735_BLUE);
+}
