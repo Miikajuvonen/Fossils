@@ -1,75 +1,183 @@
-#include <WiFi.h>
-#include <WiFiClientSecure.h>
-#include <UniversalTelegramBot.h>
-#include <ArduinoJson.h>
-#include <Servo.h>
+/**
+ * Modified to "just work" with my library for the heltec esp32 lora v3 board
+ * 
+ * You need to install the Time library by Paul Stoffregen for this to work.
+ * https://github.com/PaulStoffregen/Time , but it's in the library manager 
+ * 
+*/
 
-// Replace with your WiFi credentials
-const char* ssid = "YOUR_WIFI_SSID";
-const char* password = "YOUR_WIFI_PASSWORD";
+// This example doesn't work as is on the Heltec Wireless Stick
 
-// Replace with your bot token
-const char* botToken = "YOUR_TELEGRAM_BOT_TOKEN";
+#define HELTEC_POWER_BUTTON
+#include <heltec_unofficial.h>
 
-// Replace with your chat ID
-const String chat_id = "YOUR_CHAT_ID";
+/**
+   The MIT License (MIT)
 
-WiFiClientSecure client;
-UniversalTelegramBot bot(botToken, client);
+   Copyright (c) 2018 by ThingPulse, Daniel Eichhorn
 
-Servo parkingServo;  // Servo object
-const int servoPin = 13;  // Change to your GPIO pin
+   Permission is hereby granted, free of charge, to any person obtaining a copy
+   of this software and associated documentation files (the "Software"), to deal
+   in the Software without restriction, including without limitation the rights
+   to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+   copies of the Software, and to permit persons to whom the Software is
+   furnished to do so, subject to the following conditions:
 
-unsigned long lastTimeBotRan = 0;
-const int botRequestDelay = 1000;
+   The above copyright notice and this permission notice shall be included in all
+   copies or substantial portions of the Software.
+
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+   AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+   SOFTWARE.
+
+   ThingPulse invests considerable time and money to develop these open source libraries.
+   Please support us by buying our products (and not the clones) from
+   https://thingpulse.com
+
+*/
+
+#include <TimeLib.h>
+
+// Include custom images
+#include "images.h"
+
+// This creates the UI instance that makes the multiple panes and all.
+OLEDDisplayUi ui ( &display );
+
+int screenW = 128;
+int screenH = 64;
+int clockCenterX = screenW / 2;
+int clockCenterY = ((screenH - 16) / 2) + 16; // top yellow part is 16 px height
+int clockRadius = 23;
+
+// utility function for digital clock display: prints leading 0
+String twoDigits(int digits) {
+  if (digits < 10) {
+    String i = '0' + String(digits);
+    return i;
+  }
+  else {
+    return String(digits);
+  }
+}
+
+void clockOverlay(OLEDDisplay *display, OLEDDisplayUiState* state) {
+
+}
+
+void analogClockFrame(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y) {
+  //  ui.disableIndicator();
+
+  // Draw the clock face
+  //  display->drawCircle(clockCenterX + x, clockCenterY + y, clockRadius);
+  display->drawCircle(clockCenterX + x, clockCenterY + y, 2);
+  //
+  //hour ticks
+  for ( int z = 0; z < 360; z = z + 30 ) {
+    //Begin at 0° and stop at 360°
+    float angle = z ;
+    angle = ( angle / 57.29577951 ) ; //Convert degrees to radians
+    int x2 = ( clockCenterX + ( sin(angle) * clockRadius ) );
+    int y2 = ( clockCenterY - ( cos(angle) * clockRadius ) );
+    int x3 = ( clockCenterX + ( sin(angle) * ( clockRadius - ( clockRadius / 8 ) ) ) );
+    int y3 = ( clockCenterY - ( cos(angle) * ( clockRadius - ( clockRadius / 8 ) ) ) );
+    display->drawLine( x2 + x , y2 + y , x3 + x , y3 + y);
+  }
+
+  // display second hand
+  float angle = second() * 6 ;
+  angle = ( angle / 57.29577951 ) ; //Convert degrees to radians
+  int x3 = ( clockCenterX + ( sin(angle) * ( clockRadius - ( clockRadius / 5 ) ) ) );
+  int y3 = ( clockCenterY - ( cos(angle) * ( clockRadius - ( clockRadius / 5 ) ) ) );
+  display->drawLine( clockCenterX + x , clockCenterY + y , x3 + x , y3 + y);
+  //
+  // display minute hand
+  angle = minute() * 6 ;
+  angle = ( angle / 57.29577951 ) ; //Convert degrees to radians
+  x3 = ( clockCenterX + ( sin(angle) * ( clockRadius - ( clockRadius / 4 ) ) ) );
+  y3 = ( clockCenterY - ( cos(angle) * ( clockRadius - ( clockRadius / 4 ) ) ) );
+  display->drawLine( clockCenterX + x , clockCenterY + y , x3 + x , y3 + y);
+  //
+  // display hour hand
+  angle = hour() * 30 + int( ( minute() / 12 ) * 6 )   ;
+  angle = ( angle / 57.29577951 ) ; //Convert degrees to radians
+  x3 = ( clockCenterX + ( sin(angle) * ( clockRadius - ( clockRadius / 2 ) ) ) );
+  y3 = ( clockCenterY - ( cos(angle) * ( clockRadius - ( clockRadius / 2 ) ) ) );
+  display->drawLine( clockCenterX + x , clockCenterY + y , x3 + x , y3 + y);
+}
+
+void digitalClockFrame(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y) {
+  String timenow = String(hour()) + ":" + twoDigits(minute()) + ":" + twoDigits(second());
+  display->setTextAlignment(TEXT_ALIGN_CENTER);
+  display->setFont(ArialMT_Plain_24);
+  display->drawString(clockCenterX + x , clockCenterY + y, timenow );
+}
+
+// This array keeps function pointers to all frames
+// frames are the single views that slide in
+FrameCallback frames[] = { analogClockFrame, digitalClockFrame };
+
+// how many frames are there?
+int frameCount = 2;
+
+// Overlays are statically drawn on top of a frame eg. a clock
+OverlayCallback overlays[] = { clockOverlay };
+int overlaysCount = 1;
 
 void setup() {
-    Serial.begin(115200);
+  heltec_setup();
 
-    // Connect to WiFi
-    WiFi.begin(ssid, password);
-    while (WiFi.status() != WL_CONNECTED) {
-        delay(1000);
-        Serial.println("Connecting to WiFi...");
-    }
-    Serial.println("Connected to WiFi");
+  // The ESP is capable of rendering 60fps in 80Mhz mode
+  // but that won't give you much time for anything else
+  // run it in 160Mhz mode or just set it to 30 fps
+  ui.setTargetFPS(60);
 
-    client.setInsecure();  // Avoid certificate validation
+  // Customize the active and inactive symbol
+  ui.setActiveSymbol(activeSymbol);
+  ui.setInactiveSymbol(inactiveSymbol);
 
-    parkingServo.attach(servoPin);
-    parkingServo.write(0);  // Reset to default position
+  // You can change this to
+  // TOP, LEFT, BOTTOM, RIGHT
+  ui.setIndicatorPosition(TOP);
+
+  // Defines where the first frame is located in the bar.
+  ui.setIndicatorDirection(LEFT_RIGHT);
+
+  // You can change the transition that is used
+  // SLIDE_LEFT, SLIDE_RIGHT, SLIDE_UP, SLIDE_DOWN
+  ui.setFrameAnimation(SLIDE_LEFT);
+
+  // Add frames
+  ui.setFrames(frames, frameCount);
+
+  // Add overlays
+  ui.setOverlays(overlays, overlaysCount);
+
+  // Initialising the UI will init the display too.
+  ui.init();
+
+  unsigned long secsSinceStart = millis();
+  // Unix time starts on Jan 1 1970. In seconds, that's 2208988800:
+  const unsigned long seventyYears = 2208988800UL;
+  // subtract seventy years:
+  unsigned long epoch = secsSinceStart - seventyYears * SECS_PER_HOUR;
+  setTime(epoch);
+
 }
 
-void handleNewMessages(int numNewMessages) {
-    for (int i = 0; i < numNewMessages; i++) {
-        String chatID = bot.messages[i].chat_id;
-        String text = bot.messages[i].text;
-
-        Serial.println("Received command: " + text);
-
-        if (chatID == chat_id) {
-            if (text.startsWith("/set ")) {
-                int angle = text.substring(5).toInt();
-                if (angle >= 0 && angle <= 180) {
-                    parkingServo.write(angle);
-                    bot.sendMessage(chatID, "Parking disc set to " + String(angle) + " degrees.", "");
-                } else {
-                    bot.sendMessage(chatID, "Invalid angle! Use 0-180.", "");
-                }
-            } else {
-                bot.sendMessage(chatID, "Use /set [0-180] to set the parking time.", "");
-            }
-        }
-    }
-}
 
 void loop() {
-    if (millis() - lastTimeBotRan > botRequestDelay) {
-        int numNewMessages = bot.getUpdates(bot.last_message_received + 1);
-        while (numNewMessages) {
-            handleNewMessages(numNewMessages);
-            numNewMessages = bot.getUpdates(bot.last_message_received + 1);
-        }
-        lastTimeBotRan = millis();
-    }
+  heltec_loop();
+  int remainingTimeBudget = ui.update();
+
+  if (remainingTimeBudget > 0) {
+    // You can do some work here
+    // Don't do stuff if you are below your
+    // time budget.
+    heltec_delay(remainingTimeBudget);
+  }
 }
