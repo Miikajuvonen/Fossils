@@ -1,0 +1,59 @@
+#include <heltec_unofficial.h>
+#include <TimeLib.h>
+
+// Display settings
+int screenW = 128;
+int screenH = 64;
+int clockCenterX = screenW / 2;
+int clockCenterY = screenH / 2;
+
+// Function to format numbers to two digits (e.g., 00:00)
+String twoDigits(int digits) {
+  return (digits < 10) ? '0' + String(digits) : String(digits);
+}
+
+// Round time to the next half-hour
+int roundToNextHalfHour(int minutes) {
+  return ((minutes / 30) + 1) * 30 % 60;
+}
+
+void drawTime(OLEDDisplay *display, int16_t x, int16_t y) {
+  // Get current time
+  int currentHour = hour();
+  int currentMinute = minute();
+  
+  // Simulated parking start time (can be replaced with acceleration sensor data later)
+  int stopHour = currentHour;
+  int stopMinute = roundToNextHalfHour(currentMinute);
+
+  // Rounding might push the hour forward
+  if (stopMinute == 0) stopHour++;
+
+  String currentTime = twoDigits(currentHour) + ":" + twoDigits(currentMinute);
+  String stopTime = twoDigits(stopHour) + ":" + twoDigits(stopMinute);
+
+  display->setTextAlignment(TEXT_ALIGN_CENTER);
+  display->setFont(ArialMT_Plain_16);
+  display->drawString(clockCenterX + x, clockCenterY - 10 + y, "Now: " + currentTime);
+  display->drawString(clockCenterX + x, clockCenterY + 10 + y, "Parking: " + stopTime);
+}
+
+void setup() {
+  heltec_setup();
+  ui.setTargetFPS(30);
+
+  // Use a simple view without animations
+  ui.setFrames(drawTime, 1);
+  ui.init();
+
+  // Set a test time (Unix time)
+  setTime(14, 28, 0, 1, 1, 2025); // 14:28:00 (Modify for testing)
+}
+
+void loop() {
+  heltec_loop();
+  int remainingTimeBudget = ui.update();
+  if (remainingTimeBudget > 0) {
+    heltec_delay(remainingTimeBudget);
+  }
+}
