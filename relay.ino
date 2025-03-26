@@ -51,8 +51,8 @@
   #include <UniversalTelegramBot.h>
   
   // Wifi network station credentials
-  #define WIFI_SSID "moaiwlan"
-  #define WIFI_PASSWORD "Ossi1Paavo234"
+  #define WIFI_SSID ""
+  #define WIFI_PASSWORD ""
   
   
   const long utcOffsetWinter = 7200; // Offset from UTC in seconds (3600 seconds = 1h) -- UTC+1 (Central European Winter Time)
@@ -62,7 +62,7 @@
   NTPClient ntpClient(udpSocket, "pool.ntp.org", utcOffsetWinter);
   
   // Telegram BOT Token (Get from Botfather)
-  #define BOT_TOKEN "7568394111:AAEc673Oxmk8AeYf_Pad_P_2dkgpvWaxF3Y"
+  #define BOT_TOKEN ""
   
   const unsigned long BOT_MTBS = 1000; // mean time between scan messages
   
@@ -137,9 +137,8 @@
   
         if (text == "/start")
         {
-          String welcome = "Welcome to Universal Arduino Telegram Bot library, " + from_name + ".\n";
-          welcome += "This is Inline Keyboard Markup example.\n\n";
-          welcome += "/options : returns the inline keyboard\n";
+          String welcome = "Welcome to the remote parking disc utility, " + from_name + ".\n";
+          welcome += "/options : returns the inline keyboard with the commands\n";
   
           bot.sendMessage(chat_id, welcome, "Markdown");
         }
